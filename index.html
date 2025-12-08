@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>10になるペアマスター</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;900&display=swap');
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            background-color: #f0f9ff;
+            touch-action: manipulation;
+        }
+        .bounce {
+            animation: bounce 0.5s infinite alternate;
+        }
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-10px); }
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .dot-pop {
+            animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes pop {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- コンポーネント: 10フレーム（ドット表示） ---
+        const TenFrame = ({ num1, num2, isCarryMode }) => {
+            // ドットを生成するロジック
+            // 基本/10を作るモード: 1つのフレームにnum1(赤)とnum2(黄)を入れる
+            // 繰り上がりモード: num1(赤)を埋め、num2(黄)で10を作り、溢れた分を次のフレームへ
+            
+            const renderDots = () => {
+                const frames = [];
+                let totalDots = num1 + num2;
+                
+                // フレーム1 (1-10)
+                let frame1Dots = [];
+                for (let i = 0; i < 10; i++) {
+                    let color = "bg-gray-200"; // 空
+                    if (i < num1) {
+                        color = "bg-orange-500"; // 1つ目の数
+                    } else if (i < num1 + num2) {
+                        color = "bg-yellow-400"; // 2つ目の数（10以下の部分）
+                    }
+                    frame1Dots.push(color);
+                }
+                frames.push(frame1Dots);
+
+                // フレーム2 (11-20) - 繰り上がりがある場合のみ表示
+                if (totalDots > 10 || isCarryMode) {
+                    let frame2Dots = [];
+                    for (let i = 0; i < 10; i++) {
+                        let color = "bg-gray-200"; // 空
+                        // 10を超えた分を黄色で塗る
+                        if (10 + i < num1 + num2) {
+                            color = "bg-yellow-400";
+                        }
+                        frame2Dots.push(color);
+                    }
+                    frames.push(frame2Dots);
+                }
+
+                return frames;
+            };
+
+            const frames = renderDots();
+
+            return (
+                <div className="flex flex-col items-center gap-4 my-4">
+                    {frames.map((frame, frameIndex) => (
+                        <div key={frameIndex} className="grid grid-cols-5 gap-2 p-3 bg-white rounded-xl shadow-md border-2 border-slate-200">
+                            {frame.map((color, dotIndex) => (
+                                <div 
+                                    key={dotIndex} 
+                                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full ${color} ${color !== 'bg-gray-200' ? 'dot-pop shadow-sm' : ''} transition-all duration-300`}
+                                ></div>
+                            ))}
+                        </div>
+                    ))}
+                    <div className="text-slate-600 text-sm font-bold">
+                        {isCarryMode && num1 + num2 > 10 ? (
+                            <span>
+                                <span className="text-orange-500">{num1}</span> と 
+                                <span className="text-yellow-500"> {10 - num1} </span> で10！
+                                あまりの <span className="text-yellow-500">{num2 - (10 - num1)}</span> をたして...
+                            </span>
+                        ) : (
+                            <span>
+                                <span className="text-orange-500">{num1}個</span> と 
+                                <span className="text-yellow-500"> {num2}個</span>
+                            </span>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- メインアプリ ---
+        const App = () => {
+            // 保存データの初期構造
+            const initialStats = {
+                basic: { totalStars: 0, maxStreak: 0 },
+                carry: { totalStars: 0, maxStreak: 0 },
+                make10: { totalStars: 0, maxStreak: 0 }
+            };
+
+            // ローカルストレージからデータを読み込む、なければ初期値
+            const [savedStats, setSavedStats] = useState(() => {
+                const saved = localStorage.getItem('make10MasterStats');
+                return saved ? JSON.parse(saved) : initialStats;
+            });
+
+            const [mode, setMode] = useState('menu'); // menu, basic, carry, make10
+            const [problem, setProblem] = useState(null);
+            const [userAnswer, setUserAnswer] = useState('');
+            const [feedback, setFeedback] = useState(null); // 'correct', 'incorrect', null
+            
+            // セッション（今のプレイ）でのスコアとストリーク
+            const [sessionScore, setSessionScore] = useState(0);
+            const [currentStreak, setCurrentStreak] = useState(0);
+
+            // 統計が更新されたらローカルストレージに保存
+            useEffect(() => {
+                localStorage.setItem('make10MasterStats', JSON.stringify(savedStats));
+            }, [savedStats]);
+
+            // 問題生成ロジック
+            const generateProblem = (currentMode) => {
+                let p = {};
+                if (currentMode === 'basic') {
+                    const n1 = Math.floor(Math.random() * 9) + 1;
+                    const n2 = 10 - n1;
+                    p = { 
+                        type: 'basic', 
+                        num1: n1, 
+                        num2: n2, 
+                        display: `${n1} + ${n2} = ?`, 
+                        answer: 10,
+                        missing: 'sum'
+                    };
+                } else if (currentMode === 'carry') {
+                    const n1 = Math.floor(Math.random() * 4) + 6; 
+                    const minN2 = 11 - n1;
+                    const maxN2 = 9;
+                    const n2 = Math.floor(Math.random() * (maxN2 - minN2 + 1)) + minN2;
+                    p = { 
+                        type: 'carry', 
+                        num1: n1, 
+                        num2: n2, 
+                        display: `${n1} + ${n2} = ?`, 
+                        answer: n1 + n2,
+                        missing: 'sum'
+                    };
+                } else if (currentMode === 'make10') {
+                    const n1 = Math.floor(Math.random() * 9) + 1;
+                    const n2 = 10 - n1;
+                    const hideSecond = Math.random() > 0.5;
+                    p = {
+                        type: 'make10',
+                        num1: n1,
+                        num2: n2,
+                        display: hideSecond ? `${n1} + ■ = 10` : `■ + ${n2} = 10`,
+                        answer: hideSecond ? n2 : n1,
+                        missing: hideSecond ? 'second' : 'first'
+                    };
+                }
+                setProblem(p);
+                setUserAnswer('');
+                setFeedback(null);
+            };
+
+            const startGame = (selectedMode) => {
+                setMode(selectedMode);
+                setSessionScore(0);
+                setCurrentStreak(0);
+                generateProblem(selectedMode);
+            };
+
+            const handleInput = (num) => {
+                if (feedback === 'correct') return;
+                
+                if (num === 'BS') {
+                    setUserAnswer(prev => prev.slice(0, -1));
+                    return;
+                }
+                
+                if (userAnswer.length >= 2) return;
+
+                const newAnswer = userAnswer + num;
+                setUserAnswer(newAnswer);
+            };
+
+            const checkAnswer = () => {
+                if (!problem || !userAnswer) return;
+
+                const numVal = parseInt(userAnswer, 10);
+                if (numVal === problem.answer) {
+                    setFeedback('correct');
+                    
+                    // セッションスコア更新
+                    const newSessionScore = sessionScore + 1;
+                    const newStreak = currentStreak + 1;
+                    setSessionScore(newSessionScore);
+                    setCurrentStreak(newStreak);
+
+                    // 保存用データ更新
+                    setSavedStats(prev => {
+                        const currentModeStats = prev[mode];
+                        return {
+                            ...prev,
+                            [mode]: {
+                                totalStars: currentModeStats.totalStars + 1,
+                                maxStreak: Math.max(currentModeStats.maxStreak, newStreak)
+                            }
+                        };
+                    });
+
+                } else {
+                    setFeedback('incorrect');
+                    setCurrentStreak(0);
+                }
+            };
+
+            const nextProblem = () => {
+                generateProblem(mode);
+            };
+
+            const returnToMenu = () => {
+                setMode('menu');
+            };
+
+            // 統計表示用のバッジコンポーネント
+            const StatsBadge = ({ stats }) => (
+                <div className="flex gap-2 text-xs sm:text-sm bg-slate-100 px-3 py-1 rounded-full mt-1">
+                    <span className="text-indigo-600 font-bold" title="合計スター数">⭐ {stats.totalStars}</span>
+                    <span className="text-orange-500 font-bold" title="最高連続正解数">🔥 MAX {stats.maxStreak}</span>
+                </div>
+            );
+
+            // --- 画面レンダリング ---
+
+            // 1. メニュー画面
+            if (mode === 'menu') {
+                const totalAllStars = savedStats.basic.totalStars + savedStats.carry.totalStars + savedStats.make10.totalStars;
+
+                return (
+                    <div className="min-h-screen flex flex-col items-center justify-center p-4 max-w-md mx-auto">
+                        <h1 className="text-3xl font-black text-indigo-600 mb-2 text-center drop-shadow-sm">
+                            🔟 ペアマスター
+                        </h1>
+                        <div className="mb-8 bg-white px-6 py-2 rounded-full shadow-sm border border-indigo-100 text-indigo-800 font-bold">
+                            ぜんぶで ⭐ {totalAllStars} 個あつめたよ！
+                        </div>
+                        
+                        <div className="w-full space-y-4">
+                            <button 
+                                onClick={() => startGame('basic')}
+                                className="w-full bg-white border-b-4 border-indigo-200 hover:border-indigo-400 active:border-b-0 active:translate-y-1 p-4 rounded-2xl shadow-lg flex items-center gap-4 transition-all relative overflow-hidden"
+                            >
+                                <div className="text-4xl z-10">🐣</div>
+                                <div className="text-left z-10 flex-1">
+                                    <div className="flex justify-between items-center">
+                                        <div className="font-bold text-xl text-indigo-800">基本練習モード</div>
+                                        <StatsBadge stats={savedStats.basic} />
+                                    </div>
+                                    <div className="text-sm text-indigo-400">7 + 3 = ?</div>
+                                </div>
+                            </button>
+
+                            <button 
+                                onClick={() => startGame('carry')}
+                                className="w-full bg-white border-b-4 border-pink-200 hover:border-pink-400 active:border-b-0 active:translate-y-1 p-4 rounded-2xl shadow-lg flex items-center gap-4 transition-all"
+                            >
+                                <div className="text-4xl">🚀</div>
+                                <div className="text-left flex-1">
+                                    <div className="flex justify-between items-center">
+                                        <div className="font-bold text-xl text-pink-800">繰り上がりモード</div>
+                                        <StatsBadge stats={savedStats.carry} />
+                                    </div>
+                                    <div className="text-sm text-pink-400">7 + 4 = ?</div>
+                                </div>
+                            </button>
+
+                            <button 
+                                onClick={() => startGame('make10')}
+                                className="w-full bg-white border-b-4 border-emerald-200 hover:border-emerald-400 active:border-b-0 active:translate-y-1 p-4 rounded-2xl shadow-lg flex items-center gap-4 transition-all"
+                            >
+                                <div className="text-4xl">🧩</div>
+                                <div className="text-left flex-1">
+                                    <div className="flex justify-between items-center">
+                                        <div className="font-bold text-xl text-emerald-800">10を作るモード</div>
+                                        <StatsBadge stats={savedStats.make10} />
+                                    </div>
+                                    <div className="text-sm text-emerald-400">7 + ■ = 10</div>
+                                </div>
+                            </button>
+                        </div>
+                        <div className="mt-8 text-center text-slate-400 text-sm">
+                            10になるペアをみつけよう！
+                        </div>
+                    </div>
+                );
+            }
+
+            // 2. ゲーム画面
+            return (
+                <div className="min-h-screen flex flex-col items-center p-4 max-w-md mx-auto relative bg-slate-50">
+                    {/* ヘッダー */}
+                    <div className="w-full flex justify-between items-center mb-6">
+                        <button onClick={returnToMenu} className="text-slate-400 hover:text-slate-600 font-bold px-3 py-1 bg-white rounded-full shadow-sm text-sm sm:text-base">
+                            ← メニューへ
+                        </button>
+                        <div className="flex gap-2 sm:gap-4">
+                            <div className="bg-white px-3 py-1 rounded-full shadow-sm text-indigo-600 font-bold text-sm sm:text-base flex items-center gap-1">
+                                <span>⭐</span>
+                                <span>{sessionScore}</span>
+                                <span className="text-xs text-slate-400 ml-1">/ {savedStats[mode].totalStars}</span>
+                            </div>
+                            <div className="bg-white px-3 py-1 rounded-full shadow-sm text-orange-500 font-bold text-sm sm:text-base flex items-center gap-1">
+                                <span>🔥</span>
+                                <span>{currentStreak}</span>
+                                {currentStreak > savedStats[mode].maxStreak && savedStats[mode].maxStreak > 0 && (
+                                    <span className="text-xs bg-red-100 text-red-500 px-1 rounded ml-1">新記録!</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 問題表示エリア */}
+                    <div className="w-full bg-white rounded-3xl shadow-xl p-6 mb-6 text-center border-b-8 border-indigo-100 relative overflow-hidden">
+                        
+                        {/* 質問文 */}
+                        <div className="text-5xl font-black text-slate-700 mb-6 font-mono tracking-widest flex justify-center items-center gap-2">
+                            {problem.type === 'make10' ? (
+                                <>
+                                    {problem.missing === 'second' ? (
+                                        <>{problem.num1} + <span className="text-indigo-500 bg-indigo-50 px-2 rounded border-2 border-indigo-200">{userAnswer || '?'}</span> = 10</>
+                                    ) : (
+                                        <><span className="text-indigo-500 bg-indigo-50 px-2 rounded border-2 border-indigo-200">{userAnswer || '?'}</span> + {problem.num2} = 10</>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    {problem.num1} + {problem.num2} = <span className="text-indigo-500">{userAnswer || '?'}</span>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="min-h-[160px] flex justify-center items-center bg-slate-50 rounded-xl">
+                            {problem.type === 'make10' && !feedback ? (
+                                <div className="text-slate-400 font-bold">
+                                    {problem.missing === 'second' ? (
+                                        <div className="flex flex-col items-center">
+                                            <div className="flex gap-1 mb-2">
+                                                {[...Array(problem.num1)].map((_, i) => <div key={i} className="w-6 h-6 rounded-full bg-orange-500"></div>)}
+                                                {[...Array(10-problem.num1)].map((_, i) => <div key={i} className="w-6 h-6 rounded-full bg-gray-200 border-2 border-dashed border-slate-300"></div>)}
+                                            </div>
+                                            <p className="text-sm">オレンジは {problem.num1}個。あといくつで10？</p>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center">
+                                            <div className="flex gap-1 mb-2">
+                                                {[...Array(10-problem.num2)].map((_, i) => <div key={i} className="w-6 h-6 rounded-full bg-gray-200 border-2 border-dashed border-slate-300"></div>)}
+                                                {[...Array(problem.num2)].map((_, i) => <div key={i} className="w-6 h-6 rounded-full bg-yellow-400"></div>)}
+                                            </div>
+                                            <p className="text-sm">きいろは {problem.num2}個。あといくつで10？</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <TenFrame 
+                                    num1={problem.num1} 
+                                    num2={problem.num2} 
+                                    isCarryMode={problem.type === 'carry'}
+                                />
+                            )}
+                        </div>
+
+                        {/* フィードバック表示 */}
+                        {feedback && (
+                            <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center fade-in z-10 rounded-2xl">
+                                {feedback === 'correct' ? (
+                                    <>
+                                        <div className="text-6xl mb-2 bounce">🎉</div>
+                                        <div className="text-2xl font-black text-indigo-600 mb-4">せいかい！</div>
+                                        {/* 正解後、完全な10フレームを見せる */}
+                                        <div className="scale-75 origin-center -my-4">
+                                            <TenFrame num1={problem.num1} num2={problem.num2} isCarryMode={problem.type === 'carry'} />
+                                        </div>
+                                        <button 
+                                            onClick={nextProblem}
+                                            className="mt-4 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition active:scale-95"
+                                        >
+                                            つぎへ進む ▶
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="text-6xl mb-2">🤔</div>
+                                        <div className="text-2xl font-black text-slate-600 mb-4">おしい！</div>
+                                        <p className="text-slate-500 mb-4 font-bold">
+                                            {problem.type === 'make10' ? '10になるペアをおぼえよう' : '図をみてかんがえてみてね'}
+                                        </p>
+                                        <div className="scale-75 origin-center -my-4">
+                                            <TenFrame num1={problem.num1} num2={problem.num2} isCarryMode={problem.type === 'carry'} />
+                                        </div>
+                                        <button 
+                                            onClick={() => { setFeedback(null); setUserAnswer(''); }}
+                                            className="mt-6 bg-slate-400 hover:bg-slate-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition active:scale-95"
+                                        >
+                                            もういちど
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* テンキー */}
+                    <div className="w-full grid grid-cols-3 gap-3">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                            <button
+                                key={num}
+                                onClick={() => handleInput(num.toString())}
+                                className="bg-white border-b-4 border-slate-200 active:border-b-0 active:translate-y-1 active:bg-slate-50 h-16 rounded-xl text-2xl font-black text-slate-700 shadow-md transition-all"
+                            >
+                                {num}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => handleInput('0')}
+                            className="bg-white border-b-4 border-slate-200 active:border-b-0 active:translate-y-1 h-16 rounded-xl text-2xl font-black text-slate-700 shadow-md transition-all"
+                        >
+                            0
+                        </button>
+                        <button
+                            onClick={() => handleInput('BS')}
+                            className="bg-red-50 border-b-4 border-red-100 active:border-b-0 active:translate-y-1 h-16 rounded-xl text-xl font-bold text-red-400 shadow-md transition-all flex items-center justify-center"
+                        >
+                            ⌫
+                        </button>
+                        <button
+                            onClick={checkAnswer}
+                            disabled={!userAnswer}
+                            className={`bg-indigo-500 border-b-4 border-indigo-700 active:border-b-0 active:translate-y-1 h-16 rounded-xl text-xl font-bold text-white shadow-md transition-all flex items-center justify-center ${!userAnswer ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
