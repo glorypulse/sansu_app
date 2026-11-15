@@ -77,17 +77,13 @@
 (() => {
   const fruits = ["🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍒","🍑","🥝","🍍","🥭","🥥","🍈"];
   const $ = id => document.getElementById(id);
-  let n = 3, row = 0, col = 0, chosen = null, hintStep = 0, items = [], solved = false;
+  let n = 3, row = 0, col = 0, chosen = null, hintStep = 0, items = [], solved = false, verticalStart, horizontalStart, outcome = null;
 
   function rand(max) { return Math.floor(Math.random() * max); }
-  function ordinal(v) { return `${v + 1}ばんめ`; }
-  function directionText(index, count, start, axis) {
-    const value = start === "top" || start === "left" ? index + 1 : count - index;
-    return value;
-  }
   function makeProblem() {
     n = Number($("size").value);
-    row = rand(n); col = rand(n); chosen = null; hintStep = 0; solved = false;
+    row = rand(n); col = rand(n); chosen = null; hintStep = 0; solved = false; outcome = null;
+    ["checkBtn", "resetBtn", "answerBtn", "hintBtn"].forEach(id => $(id).disabled = false);
     items = Array.from({length:n*n}, () => fruits[rand(fruits.length)]);
     $("board").style.gridTemplateColumns = `repeat(${n}, 1fr)`;
     $("board").innerHTML = "";
@@ -100,8 +96,8 @@
       cell.addEventListener("click", () => selectCell(i));
       $("board").appendChild(cell);
     });
-    const verticalStart = Math.random() < .5 ? "上" : "下";
-    const horizontalStart = Math.random() < .5 ? "左" : "右";
+    verticalStart = Math.random() < .5 ? "上" : "下";
+    horizontalStart = Math.random() < .5 ? "左" : "右";
     const vr = verticalStart === "上" ? row + 1 : n - row;
     const hc = horizontalStart === "左" ? col + 1 : n - col;
     $("question").textContent = `${verticalStart}から${vr}ばんめ、${horizontalStart}から${hc}ばんめはどこ？`;
@@ -117,10 +113,15 @@
     $("status").textContent = "このマスでよければ「こたえあわせ」を押してね。";
   }
   function targetIndex() { return row*n + col; }
+  function finish(result) {
+    solved = true; outcome = result;
+    ["checkBtn", "resetBtn", "answerBtn", "hintBtn"].forEach(id => $(id).disabled = true);
+  }
   function check() {
+    if (solved) return;
     if (chosen === null) { $("status").textContent = "まず、マスをひとつタップしてね。"; return; }
     if (chosen === targetIndex()) {
-      solved = true;
+      finish(hintStep ? "assisted" : "independent");
       $("status").textContent = "せいかい！ よく見つけたね 🎉";
       $("stepLabel").textContent = "せいかい";
       [...$("board").children].forEach((el, i) => { el.disabled = true; if (i === targetIndex()) el.classList.add("target"); });
@@ -131,9 +132,8 @@
   function hint() {
     if (solved) return;
     const cells = [...$("board").children];
+    if (hintStep >= 2) return;
     cells.forEach(el => el.classList.remove("row-hint","target"));
-    const verticalStart = $("question").textContent.startsWith("上") ? "上" : "下";
-    const horizontalStart = $("question").textContent.includes("左から") ? "左" : "右";
     if (hintStep === 0) {
       for (let c=0;c<n;c++) cells[row*n+c].classList.add("row-hint");
       $("stepLabel").textContent = "ヒント 1";
@@ -150,7 +150,8 @@
     }
   }
   function reveal() {
-    solved = true;
+    if (solved) return;
+    finish("revealed");
     [...$("board").children].forEach((el, i) => {
       el.disabled = true;
       if (i === targetIndex()) el.classList.add("target");
@@ -164,12 +165,13 @@
     speechSynthesis.speak(new SpeechSynthesisUtterance($("question").textContent));
   }
   $("size").addEventListener("change", makeProblem);
-  $("hintMode").addEventListener("change", () => { $("hintBtn").classList.toggle("hidden", $("hintMode").value === "none"); });
+  $("hintMode").addEventListener("change", makeProblem);
   $("speak").addEventListener("change", () => { if ($("speak").checked) speakQuestion(); });
   $("hintBtn").addEventListener("click", hint);
   $("checkBtn").addEventListener("click", check);
   $("nextBtn").addEventListener("click", makeProblem);
   $("resetBtn").addEventListener("click", () => {
+    if (solved) return;
     chosen = null;
     [...$("board").children].forEach(el => el.classList.remove("chosen"));
     $("status").textContent = "えらびなおしてね。";
