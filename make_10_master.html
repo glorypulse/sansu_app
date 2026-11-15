@@ -7,6 +7,7 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="make_10_master_logic.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;900&display=swap');
@@ -42,7 +43,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
         // --- コンポーネント: 10フレーム（ドット表示） ---
         const TenFrame = ({ num1, num2, isCarryMode }) => {
@@ -135,6 +136,7 @@
             const [problem, setProblem] = useState(null);
             const [userAnswer, setUserAnswer] = useState('');
             const [feedback, setFeedback] = useState(null); // 'correct', 'incorrect', null
+            const answerGuard = useRef(window.Make10MasterLogic.createAnswerGuard());
             
             // セッション（今のプレイ）でのスコアとストリーク
             const [sessionScore, setSessionScore] = useState(0);
@@ -147,6 +149,7 @@
 
             // 問題生成ロジック
             const generateProblem = (currentMode) => {
+                answerGuard.current.reset();
                 let p = {};
                 if (currentMode === 'basic') {
                     const n1 = Math.floor(Math.random() * 9) + 1;
@@ -212,11 +215,17 @@
             };
 
             const checkAnswer = () => {
-                // 正解後は次の問題に進むまで、OKから再加算しない。
-                if (!problem || !userAnswer || feedback === 'correct') return;
+                if (!problem) return;
 
                 const numVal = parseInt(userAnswer, 10);
-                if (numVal === problem.answer) {
+                const result = answerGuard.current.submit({
+                    feedback,
+                    hasAnswer: Boolean(userAnswer),
+                    isCorrect: numVal === problem.answer
+                });
+                if (!result) return;
+
+                if (result === 'correct') {
                     setFeedback('correct');
                     
                     // セッションスコア更新
