@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fff7dc">
+  <meta name="description" content="あそびながら算数にチャレンジ！ふたつのミニゲームで楽しくれんしゅうしよう。">
+  <title>さんすう わくわくランド</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #29314c;
+      --muted: #656d83;
+      --purple: #7651cf;
+      --yellow: #ffd95c;
+      --paper: #fffdf7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px 18px 22px;
+      color: var(--ink);
+      font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+      background:
+        radial-gradient(circle at 8% 15%, #fff 0 5px, transparent 6px),
+        radial-gradient(circle at 91% 24%, #fff 0 7px, transparent 8px),
+        linear-gradient(155deg, #fff4c9 0%, #ffe9eb 50%, #e6f5ff 100%);
+    }
+    a { color: inherit; }
+    .page { width: min(100%, 960px); margin: 0 auto; }
+    .hero { text-align: center; padding: 16px 12px 24px; }
+    .eyebrow {
+      display: inline-block;
+      padding: 7px 15px;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      background: #fff9;
+      color: #775bc1;
+      font-size: .9rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+    h1 {
+      margin: 14px 0 8px;
+      font-size: clamp(2.2rem, 7vw, 4.5rem);
+      line-height: 1.15;
+      letter-spacing: .025em;
+      text-shadow: 0 4px 0 #fff;
+    }
+    h1 span { display: inline-block; transform: rotate(-3deg); color: #ef7c58; }
+    .intro { margin: 0; color: #555d76; font-size: clamp(1rem, 2.5vw, 1.2rem); font-weight: 650; }
+    .sparkles { margin: 14px 0 0; font-size: 1.5rem; letter-spacing: .35em; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      margin: 8px auto 24px;
+    }
+    .game {
+      --accent: #438b63;
+      --wash: #e9f8ec;
+      position: relative;
+      display: flex;
+      min-height: 300px;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+      padding: 26px 24px 22px;
+      border: 4px solid #fff;
+      border-radius: 30px;
+      background: var(--paper);
+      box-shadow: 0 10px 0 #453d5420, 0 18px 35px #453d5412;
+      text-align: center;
+      text-decoration: none;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .game:nth-child(2) { --accent: #db8b16; --wash: #fff4d5; }
+    .game::before, .game::after {
+      position: absolute;
+      z-index: 0;
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      background: var(--wash);
+      content: "";
+    }
+    .game::before { top: -68px; left: -48px; }
+    .game::after { right: -55px; bottom: -76px; }
+    .game:hover { transform: translateY(-6px) rotate(-.5deg); box-shadow: 0 15px 0 #453d5418, 0 23px 38px #453d5420; }
+    .game:active { transform: translateY(1px) scale(.99); }
+    .game:focus-visible { outline: 5px solid #343b59; outline-offset: 5px; }
+    .badge, .icon, .game h2, .game p, .play { position: relative; z-index: 1; }
+    .badge {
+      padding: 5px 12px;
+      border-radius: 99px;
+      background: var(--wash);
+      color: var(--accent);
+      font-size: .8rem;
+      font-weight: 900;
+    }
+    .icon {
+      display: grid;
+      width: 112px;
+      height: 112px;
+      margin: 12px 0 4px;
+      place-items: center;
+      border: 3px solid #fff;
+      border-radius: 35px;
+      background: var(--wash);
+      font-size: 4.25rem;
+      filter: drop-shadow(0 5px 0 #29314c12);
+      transition: transform .18s ease;
+    }
+    .game:hover .icon { transform: rotate(7deg) scale(1.06); }
+    .game h2 { margin: 8px 0 5px; font-size: clamp(1.3rem, 3vw, 1.7rem); line-height: 1.3; }
+    .game p { margin: 0; color: var(--muted); line-height: 1.65; }
+    .play {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: auto;
+      padding: 11px 21px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: white;
+      font-size: 1rem;
+      font-weight: 900;
+      box-shadow: 0 4px 0 color-mix(in srgb, var(--accent), #222 20%);
+    }
+    .game p + .play { margin-top: 18px; }
+    .tip {
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 11px 18px;
+      border: 2px dashed #bba6e7;
+      border-radius: 18px;
+      background: #fff9;
+      color: #5a5270;
+      text-align: center;
+      font-size: .92rem;
+    }
+    footer { margin-top: 22px; color: #77758a; text-align: center; font-size: .82rem; }
+    @media (max-width: 620px) {
+      body { padding: 18px 14px; }
+      .hero { padding: 12px 4px 17px; }
+      .cards { grid-template-columns: 1fr; gap: 14px; max-width: 440px; }
+      .game { min-height: 275px; padding: 20px; }
+      .icon { width: 96px; height: 96px; font-size: 3.6rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div class="eyebrow">あそんで まなぼう！</div>
+      <h1>さんすう <span>わくわく</span>ランド</h1>
+      <p class="intro">きょうは どのゲームにチャレンジする？</p>
+      <div class="sparkles" aria-hidden="true">⭐ 🍀 ⭐</div>
+    </header>
+
+    <nav class="cards" aria-label="あそぶゲームをえらぶ">
+      <a class="game" href="dokono_masu_kana.html">
+        <span class="badge">みつけるゲーム</span>
+        <span class="icon" aria-hidden="true">🍎</span>
+        <h2>どこのマスかな？</h2>
+        <p>ヒントをよんで、くだものの<br>ばしょを みつけよう！</p>
+        <span class="play">あそびにいく <span aria-hidden="true">▶</span></span>
+      </a>
+
+      <a class="game" href="make_10_master.html">
+        <span class="badge">かずのゲーム</span>
+        <span class="icon" aria-hidden="true">🔟</span>
+        <h2>10になるペアマスター</h2>
+        <p>すうじを くみあわせて<br>10を つくろう！</p>
+        <span class="play">あそびにいく <span aria-hidden="true">▶</span></span>
+      </a>
+    </nav>
+
+    <p class="tip">💡 すきなゲームをクリックしてね。なんどでもチャレンジできるよ！</p>
+    <footer>たのしく こつこつ、さんすう名人をめざそう！</footer>
+  </main>
+</body>
+</html>
