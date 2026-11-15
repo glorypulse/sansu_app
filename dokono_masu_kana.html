@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>どこのマスかな？</title>
+<style>
+  :root { color-scheme: light; --green:#27865a; --ink:#26332d; --soft:#f3f7f3; --line:#d6e2d8; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:20px 14px 36px; font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; color:var(--ink); background:#fbfcfa; }
+  main { max-width:680px; margin:auto; }
+  h1 { font-size:clamp(1.4rem,5vw,2rem); margin:0 0 6px; }
+  .sub { color:#65736a; margin:0 0 20px; font-size:.95rem; }
+  .panel { background:white; border:1px solid var(--line); border-radius:18px; padding:16px; margin:14px 0; box-shadow:0 2px 8px #1d43200a; }
+  .settings { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; }
+  label { display:flex; gap:7px; align-items:center; font-size:.95rem; }
+  select, button { font:inherit; border-radius:10px; border:1px solid #bdcfc1; padding:9px 12px; background:white; color:var(--ink); }
+  button { cursor:pointer; font-weight:650; }
+  button.primary { background:var(--green); border-color:var(--green); color:white; }
+  button:focus-visible, select:focus-visible { outline:3px solid #a9d8bb; outline-offset:2px; }
+  .question { text-align:center; font-size:clamp(1.2rem,4vw,1.55rem); font-weight:750; line-height:1.6; }
+  .board-wrap { display:flex; justify-content:center; padding:8px 0 14px; }
+  .board { display:grid; gap:7px; width:min(100%,440px); }
+  .cell { aspect-ratio:1; border:2px solid #d8e4da; border-radius:13px; background:#fff; display:grid; place-items:center; font-size:clamp(2rem,9vw,3.2rem); cursor:pointer; user-select:none; transition:background .15s,border-color .15s,transform .15s; }
+  .cell:active { transform:scale(.97); }
+  .cell.row-hint { background:#e7f4e9; border-color:#79b98b; }
+  .cell.target { background:#c9ebd2; border:3px solid var(--green); }
+  .cell.chosen { outline:4px solid #f0b84b; outline-offset:1px; }
+  .cell:disabled { cursor:default; }
+  .actions { display:flex; flex-wrap:wrap; justify-content:center; gap:9px; }
+  .status { min-height:2.6em; text-align:center; font-weight:650; margin:12px 0 0; }
+  .help { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+  .muted { color:#66736a; font-size:.88rem; }
+  .step { display:inline-block; border-radius:999px; padding:4px 10px; background:#eef5ef; color:#286342; font-size:.85rem; font-weight:700; margin-bottom:8px; }
+  .hidden { display:none !important; }
+  footer { text-align:center; color:#7a867e; font-size:.8rem; margin-top:20px; }
+  .row-choice { grid-column:1 / -1; display:flex; justify-content:space-around; min-height:72px; font-size:2rem; border:2px solid var(--line); }
+  .row-hint { background:#e7f4e9; border:3px solid #27865a; }
+  .chosen { outline:4px solid #dc981a; outline-offset:1px; }
+  .single-vertical { max-width:80px; }
+  .retained { text-align:center; color:#286342; margin:4px 0; min-height:1.5em; }
+  button:disabled { cursor:default; }
+  .actions button:disabled, .help button:disabled { opacity:.5; }
+  .cell:disabled:not(.row-hint):not(.target) { background:#f0f2f0; }
+  summary { cursor:pointer; min-height:44px; display:list-item; align-content:center; }
+  button, select { min-height:48px; }
+  .cell { padding:4px; }
+  .panel { padding:12px; margin:10px 0; }
+  .sub { margin-bottom:8px; }
+  .status { margin:8px 0; }
+  .board { max-width:360px; }
+  .row-choice { min-height:68px; }
+  .single-vertical { max-width:64px; }
+  .retained:empty { display:none; }
+  .settings { margin-top:8px; }
+  #historyList { padding-left:22px; font-size:.9rem; line-height:1.7; }
+  @media (max-width:420px) {
+    body { padding:10px 8px 20px; }
+    .panel { padding:10px; }
+    .board { gap:6px; }
+    .actions, .help { gap:6px; }
+    .actions button, .help button { padding:8px; font-size:.9rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>どこのマスかな？</h1>
+  <p class="sub">くだものの ばしょを みつけよう。</p>
+
+  <details class="panel parent-settings">
+    <summary>おうちのひとへ：せってい</summary>
+    <p class="muted">設定を変えると新しい問題になります。レベルは自動では上がりません。</p>
+    <div class="settings">
+    <label>レベル
+      <select id="level"><option value="1">Lv.1 ひとつの向き</option><option value="2" selected>Lv.2 段からマスへ</option><option value="3">Lv.3 ふたつの条件</option><option value="4">Lv.4 ヒントなし</option></select>
+    </label>
+    <label>マスの大きさ
+      <select id="size"><option value="3">3 × 3</option><option value="4">4 × 4</option></select>
+    </label>
+    <label>ヒント
+      <select id="hintMode"><option value="step">段階的にヒントを出す</option><option value="none">ヒントなし</option></select>
+    </label>
+    <label><input id="speak" type="checkbox"> 問題を読み上げる</label>
+    </div>
+    <p class="muted">Lv.1：一列でひとつの条件。Lv.2：段を選んでからマスを選択。Lv.3：ふたつの条件。Lv.4：ヒントなし。「こたえをみる」で終了できます。</p>
+  </details>
+
+  <section class="panel">
+    <div class="step" id="stepLabel">もんだい</div>
+    <div class="question" id="question" aria-live="polite">上から2ばんめ、左から3ばんめはどこ？</div>
+    <p id="retained" class="retained"></p>
+    <div class="board-wrap"><div class="board" id="board" aria-label="くだもののマス目"></div></div>
+    <div class="actions">
+      <button id="hintBtn">ヒント</button>
+      <button class="primary" id="checkBtn">こたえあわせ</button>
+      <button id="nextBtn">つぎのもんだい</button>
+    </div>
+    <p class="status" id="status" aria-live="polite">答えだと思うマスをタップしてね。</p>
+    <div class="help">
+      <button id="listenBtn">もういちど きく</button>
+      <button id="resetBtn">えらびなおす</button>
+      <button id="answerBtn">こたえをみる</button>
+    </div>
+  </section>
+
+  <details class="panel">
+    <summary>おうちのひとへ：きろく</summary>
+    <p id="storageStatus" class="muted"></p>
+    <p class="muted">直近10問を表示します。選択し直すだけでは誤答になりません。Lv.2の段選択・マス選択は別々に記録します。時間には読み上げや中断も含み、理解の程度を判定するものではありません。</p>
+    <ol id="historyList"></ol>
+    <button id="exportBtn">JSONで書き出す</button>
+    <button id="clearBtn">履歴を消す</button>
+  </details>
+  <footer>問題は毎回ランダムに作られます。何度でも遊べます。</footer>
+</main>
+<script>
+(() => {
+  const fruits = ['🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍒','🍑','🥝','🍍','🥭','🥥','🍈'];
+  const $ = id => document.getElementById(id);
+  const rand = n => Math.floor(Math.random() * n);
+  let problem, state, record;
+  const storageKey = 'dokono-masu-history-v1';
+  let history = [], storageAvailable = true, startedAt = 0, phaseStartedAt = 0;
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    if (Array.isArray(stored)) history = stored.filter(r => r && r.version === 1 && Array.isArray(r.events) && r.events.every(e => e && typeof e.type === 'string') && r.problem && Number.isInteger(r.problem.level) && typeof r.startedAt === 'string').slice(-200);
+  } catch { storageAvailable = false; }
+  function saveHistory() {
+    try { localStorage.setItem(storageKey, JSON.stringify(history)); }
+    catch { storageAvailable = false; }
+    renderHistory();
+  }
+  function renderHistory() {
+    $('storageStatus').textContent = storageAvailable ? 'このブラウザに直近200問を保存します。' : '保存を利用できません。この画面を閉じるまでの記録です。';
+    const labels = {independent:'補助なし正解', assisted:'補助あり正解', revealed:'答え表示', skipped:'途中で次へ', active:'取り組み中'};
+    $('historyList').innerHTML = '';
+    history.slice(-10).reverse().forEach(r => {
+      const li = document.createElement('li');
+      const answers = r.events.filter(e => e.type === 'answer');
+      li.textContent = `Lv.${r.problem.level} · ${labels[r.outcome] || '中断'} · 確定回答 ${answers.length}回 · ヒント ${r.events.filter(e => e.type === 'hint').length}回`;
+      $('historyList').appendChild(li);
+    });
+  }
+  function logEvent(type, details = {}) {
+    if (!record) return;
+    record.events.push({type, elapsedMs: Math.round(performance.now() - startedAt), phase: state.phase, ...details});
+    if (!history.includes(record)) history.push(record);
+    history = history.slice(-200); saveHistory();
+  }
+  function completeRecord(outcome) {
+    record.outcome = outcome;
+    logEvent('finish', {outcome});
+  }
+  const targetIndex = () => problem.row * problem.cols + problem.col;
+  const vertical = () => `${problem.verticalStart}から ${problem.verticalNumber}ばんめ`;
+  const horizontal = () => `${problem.horizontalStart}から ${problem.horizontalNumber}ばんめ`;
+  function makeProblem() {
+    if (record && !state.outcome) completeRecord('skipped');
+    stopSpeech();
+    const n = Number($('size').value), level = Number($('level').value);
+    $('hintMode').disabled = level === 4;
+    const singleVertical = level === 1 && rand(2) === 0;
+    const rows = level === 1 && !singleVertical ? 1 : n;
+    const cols = singleVertical ? 1 : n;
+    const row = rand(rows), col = rand(cols);
+    const verticalStart = rand(2) ? 'うえ' : 'した';
+    const horizontalStart = rand(2) ? 'ひだり' : 'みぎ';
+    problem = {n, level, rows, cols, row, col, singleVertical, verticalStart, horizontalStart,
+      verticalNumber: verticalStart === 'うえ' ? row + 1 : rows - row,
+      horizontalNumber: horizontalStart === 'ひだり' ? col + 1 : cols - col,
+      hintsEnabled: level !== 4 && $('hintMode').value !== 'none',
+      items: Array.from({length: rows * cols}, () => fruits[rand(fruits.length)])};
+    state = {phase: level === 2 ? 'row' : 'cell', chosen: null, hintStep: 0, assisted: false, outcome: null};
+    startedAt = phaseStartedAt = performance.now();
+    record = {version:1, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, startedAt: new Date().toISOString(), problem: {...problem}, outcome:'active', events:[]};
+    render();
+    message(state.phase === 'row' ? 'だんを ひとつ えらんでね。' : 'マスを ひとつ えらんでね。');
+    if ($('speak').checked) speakQuestion();
+  }
+  function message(text) { $('status').textContent = text; }
+  function render() {
+    const done = state.outcome !== null;
+    $('question').textContent = problem.level === 1
+      ? `${problem.singleVertical ? vertical() : horizontal()}は どこ？`
+      : state.phase === 'row' ? `${vertical()}の だんを えらぼう`
+      : problem.level === 2 ? `この だんで、${horizontal()}は どこ？`
+      : `${vertical()}、${horizontal()}は どこ？`;
+    $('retained').textContent = problem.level === 2 && state.phase === 'cell' ? `✓ ${vertical()}の だん` : '';
+    $('stepLabel').textContent = done ? (state.outcome === 'revealed' ? 'こたえ' : 'せいかい')
+      : `Lv.${problem.level} · ${state.phase === 'row' ? '① だんを えらぶ' : problem.level === 2 ? '② マスを えらぶ' : 'もんだい'}`;
+    const board = $('board');
+    board.innerHTML = '';
+    board.style.gridTemplateColumns = `repeat(${problem.cols}, minmax(0, 1fr))`;
+    board.classList.toggle('single-vertical', problem.singleVertical);
+    if (state.phase === 'row') {
+      for (let r = 0; r < problem.rows; r++) {
+        const button = document.createElement('button');
+        button.className = 'row-choice';
+        button.type = 'button';
+        button.setAttribute('aria-label', `うえから ${r + 1}ばんめの だん`);
+        button.setAttribute('aria-pressed', String(state.chosen === r));
+        button.classList.toggle('chosen', state.chosen === r);
+        button.classList.toggle('row-hint', r === problem.row && (state.hintStep > 0 || done));
+        button.disabled = done;
+        for (let c = 0; c < problem.cols; c++) {
+          const fruit = document.createElement('span'); fruit.textContent = problem.items[r * problem.cols + c]; button.appendChild(fruit);
+        }
+        button.addEventListener('click', () => select(r)); board.appendChild(button);
+      }
+    } else {
+      problem.items.forEach((fruit, i) => {
+        const button = document.createElement('button'), r = Math.floor(i / problem.cols);
+        button.className = 'cell'; button.type = 'button'; button.textContent = fruit;
+        button.setAttribute('aria-label', `うえから ${r + 1}ばんめ、ひだりから ${i % problem.cols + 1}ばんめ ${fruit}`);
+        button.setAttribute('aria-pressed', String(state.chosen === i));
+        button.classList.toggle('chosen', state.chosen === i);
+        button.classList.toggle('row-hint', r === problem.row && (problem.level === 2 || (problem.level !== 1 && state.hintStep > 0)));
+        button.classList.toggle('target', i === targetIndex() && (done || state.hintStep === 2));
+        button.disabled = done || (problem.level === 2 && r !== problem.row);
+        button.addEventListener('click', () => select(i)); board.appendChild(button);
+      });
+    }
+    $('checkBtn').disabled = done || state.chosen === null;
+    $('resetBtn').disabled = done || state.chosen === null;
+    $('answerBtn').disabled = done;
+    $('hintBtn').disabled = done || state.hintStep >= 2;
+    $('hintBtn').classList.toggle('hidden', !problem.hintsEnabled);
+    $('nextBtn').classList.toggle('primary', done);
+  }
+  function select(value) {
+    if (state.outcome) return;
+    state.chosen = value; render();
+    $('board').children[value]?.focus();
+    message('これで よければ「こたえあわせ」を おしてね。');
+  }
+  function check() {
+    if (state.outcome || state.chosen === null) return;
+    const correct = state.chosen === (state.phase === 'row' ? problem.row : targetIndex());
+    const chosenRow = state.phase === 'row' ? state.chosen : Math.floor(state.chosen / problem.cols);
+    const chosenCol = state.phase === 'row' ? null : state.chosen % problem.cols;
+    logEvent('answer', {correct, chosenRow, chosenCol, rowMatches: chosenRow === problem.row,
+      colMatches: chosenCol === null ? null : chosenCol === problem.col,
+      phaseElapsedMs: Math.round(performance.now() - phaseStartedAt), hintStep: state.hintStep});
+    if (!correct) { message('もういちど えらんでみよう。'); return; }
+    if (state.phase === 'row') {
+      phaseStartedAt = performance.now();
+      state.phase = 'cell'; state.chosen = null; state.hintStep = 0;
+      render(); message('この だんの なかで えらぼう。');
+      if ($('speak').checked) speakQuestion();
+    } else {
+      state.outcome = state.assisted ? 'assisted' : 'independent';
+      completeRecord(state.outcome);
+      render(); message('せいかい！ よく みつけたね 🎉');
+    }
+  }
+  function hint() {
+    if (state.outcome || !problem.hintsEnabled || state.hintStep >= 2) return;
+    state.assisted = true;
+    state.hintStep = state.phase === 'row' ? 2 : state.hintStep + 1;
+    logEvent('hint', {step:state.hintStep});
+    render();
+    message(state.phase === 'row' ? 'わくの ついた だんを みてね。' : state.hintStep === 2
+      ? 'ふとい わくの マスを みてね。' : problem.level === 1
+      ? `${problem.singleVertical ? problem.verticalStart : problem.horizontalStart}から、ひとつずつ かぞえよう。`
+      : `わくの ついた だんで、${problem.horizontalStart}から かぞえよう。`);
+  }
+  function reveal() {
+    if (state.outcome) return;
+    completeRecord('revealed');
+    state.outcome = 'revealed'; state.phase = 'cell'; state.chosen = null;
+    render(); message('ふとい わくの マスが こたえだよ。');
+  }
+  function stopSpeech() { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); }
+  function speakQuestion() {
+    if (!('speechSynthesis' in window)) { message('この ブラウザでは よみあげが つかえません。'); return; }
+    stopSpeech();
+    const utterance = new SpeechSynthesisUtterance($('question').textContent);
+    utterance.lang = 'ja-JP'; utterance.rate = 0.85;
+    window.speechSynthesis.speak(utterance);
+    logEvent('speech');
+  }
+  ['size','level','hintMode'].forEach(id => $(id).addEventListener('change', makeProblem));
+  $('speak').addEventListener('change', () => $('speak').checked ? speakQuestion() : stopSpeech());
+  $('listenBtn').addEventListener('click', speakQuestion);
+  $('hintBtn').addEventListener('click', hint);
+  $('checkBtn').addEventListener('click', check);
+  $('nextBtn').addEventListener('click', makeProblem);
+  $('resetBtn').addEventListener('click', () => {
+    if (state.outcome) return;
+    state.chosen = null; render(); message('えらびなおしてね。');
+  });
+  $('answerBtn').addEventListener('click', reveal);
+  $('exportBtn').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify({version:1, exportedAt:new Date().toISOString(), history}, null, 2)], {type:'application/json'}));
+    const link = document.createElement('a'); link.href = url; link.download = 'dokono-masu-history.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  $('clearBtn').addEventListener('click', () => {
+    if (!window.confirm('このブラウザの学習履歴を消しますか？')) return;
+    history = []; record = null; saveHistory(); makeProblem();
+  });
+  renderHistory();
+  makeProblem();
+})();
+</script>
+</body>
+</html>
