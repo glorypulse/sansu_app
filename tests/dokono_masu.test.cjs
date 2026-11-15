@@ -10,6 +10,7 @@ class Element {
   }
   set innerHTML(v){this.children=[]} set className(v){this.classes=new Set(v.split(' '))}
   setAttribute(k,v){this.attrs[k]=v} addEventListener(k,f){this.handlers[k]=f} appendChild(e){this.children.push(e)}
+  focus(){}
   click(){if(!this.disabled)this.handlers.click?.()}
 }
 function app(level=2, size=3, storage) {
@@ -62,4 +63,13 @@ test('unavailable or malformed storage does not prevent learning',()=>{
  for(const storage of [{getItem(){throw Error()},setItem(){throw Error()}},{getItem:()=>'{bad',setItem(){throw Error()}}]){
   const {els:e}=app(3,3,storage);e.answerBtn.click();assert.equal(e.stepLabel.textContent,'こたえ');assert.match(e.storageStatus.textContent,/保存を利用できません/);
  }
+});
+test('Lv.4 hides hints even when settings allow them; answer reveal is recorded separately',()=>{
+ const {els:e,saved}=app(4);assert.ok(e.hintBtn.classes.has('hidden'));assert.ok(e.hintMode.disabled);
+ e.hintBtn.click();assert.equal(e.board.children.filter(b=>b.classes.has('row-hint')).length,0);
+ e.answerBtn.click();assert.equal(JSON.parse(Object.values(saved)[0])[0].outcome,'revealed');
+});
+test('history is capped at 200 questions',()=>{
+ const {els:e,saved}=app(1);for(let i=0;i<205;i++)e.nextBtn.click();
+ assert.equal(JSON.parse(Object.values(saved)[0]).length,200);
 });

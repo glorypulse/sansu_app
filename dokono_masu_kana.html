@@ -42,16 +42,38 @@
   button:disabled { cursor:default; }
   .actions button:disabled, .help button:disabled { opacity:.5; }
   .cell:disabled:not(.row-hint):not(.target) { background:#f0f2f0; }
+  summary { cursor:pointer; min-height:44px; display:list-item; align-content:center; }
+  button, select { min-height:48px; }
+  .cell { padding:4px; }
+  .panel { padding:12px; margin:10px 0; }
+  .sub { margin-bottom:8px; }
+  .status { margin:8px 0; }
+  .board { max-width:360px; }
+  .row-choice { min-height:68px; }
+  .single-vertical { max-width:64px; }
+  .retained:empty { display:none; }
+  .settings { margin-top:8px; }
+  #historyList { padding-left:22px; font-size:.9rem; line-height:1.7; }
+  @media (max-width:420px) {
+    body { padding:10px 8px 20px; }
+    .panel { padding:10px; }
+    .board { gap:6px; }
+    .actions, .help { gap:6px; }
+    .actions button, .help button { padding:8px; font-size:.9rem; }
+  }
 </style>
 </head>
 <body>
 <main>
   <h1>どこのマスかな？</h1>
-  <p class="sub">たて・よこの場所を組み合わせて、くだものを見つけよう。</p>
+  <p class="sub">くだものの ばしょを みつけよう。</p>
 
-  <section class="panel settings" aria-label="問題の設定">
+  <details class="panel parent-settings">
+    <summary>おうちのひとへ：せってい</summary>
+    <p class="muted">設定を変えると新しい問題になります。レベルは自動では上がりません。</p>
+    <div class="settings">
     <label>レベル
-      <select id="level"><option value="1">Lv.1 ひとつの向き</option><option value="2" selected>Lv.2 段からマスへ</option><option value="3">Lv.3 ふたつの条件</option></select>
+      <select id="level"><option value="1">Lv.1 ひとつの向き</option><option value="2" selected>Lv.2 段からマスへ</option><option value="3">Lv.3 ふたつの条件</option><option value="4">Lv.4 ヒントなし</option></select>
     </label>
     <label>マスの大きさ
       <select id="size"><option value="3">3 × 3</option><option value="4">4 × 4</option></select>
@@ -60,7 +82,9 @@
       <select id="hintMode"><option value="step">段階的にヒントを出す</option><option value="none">ヒントなし</option></select>
     </label>
     <label><input id="speak" type="checkbox"> 問題を読み上げる</label>
-  </section>
+    </div>
+    <p class="muted">Lv.1：一列でひとつの条件。Lv.2：段を選んでからマスを選択。Lv.3：ふたつの条件。Lv.4：ヒントなし。「こたえをみる」で終了できます。</p>
+  </details>
 
   <section class="panel">
     <div class="step" id="stepLabel">もんだい</div>
@@ -76,14 +100,10 @@
     <div class="help">
       <button id="listenBtn">もういちど きく</button>
       <button id="resetBtn">えらびなおす</button>
-      <button id="answerBtn">こたえを見る</button>
+      <button id="answerBtn">こたえをみる</button>
     </div>
   </section>
 
-  <section class="panel">
-    <strong>ヒントの使い方</strong>
-    <p class="muted" style="margin-bottom:0">1回目：指定された「段」を色で示します。<br>2回目：その段の中で、指定された「列」を示します。<br>ヒントなしにも切り替えられます。</p>
-  </section>
   <details class="panel">
     <summary>おうちのひとへ：きろく</summary>
     <p id="storageStatus" class="muted"></p>
@@ -104,7 +124,7 @@
   let history = [], storageAvailable = true, startedAt = 0, phaseStartedAt = 0;
   try {
     const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
-    if (Array.isArray(stored)) history = stored.filter(r => r && r.version === 1 && Array.isArray(r.events) && r.problem && Number.isInteger(r.problem.level) && typeof r.startedAt === 'string').slice(-200);
+    if (Array.isArray(stored)) history = stored.filter(r => r && r.version === 1 && Array.isArray(r.events) && r.events.every(e => e && typeof e.type === 'string') && r.problem && Number.isInteger(r.problem.level) && typeof r.startedAt === 'string').slice(-200);
   } catch { storageAvailable = false; }
   function saveHistory() {
     try { localStorage.setItem(storageKey, JSON.stringify(history)); }
@@ -139,6 +159,7 @@
     if (record && !state.outcome) completeRecord('skipped');
     stopSpeech();
     const n = Number($('size').value), level = Number($('level').value);
+    $('hintMode').disabled = level === 4;
     const singleVertical = level === 1 && rand(2) === 0;
     const rows = level === 1 && !singleVertical ? 1 : n;
     const cols = singleVertical ? 1 : n;
@@ -148,7 +169,7 @@
     problem = {n, level, rows, cols, row, col, singleVertical, verticalStart, horizontalStart,
       verticalNumber: verticalStart === 'うえ' ? row + 1 : rows - row,
       horizontalNumber: horizontalStart === 'ひだり' ? col + 1 : cols - col,
-      hintsEnabled: $('hintMode').value !== 'none',
+      hintsEnabled: level !== 4 && $('hintMode').value !== 'none',
       items: Array.from({length: rows * cols}, () => fruits[rand(fruits.length)])};
     state = {phase: level === 2 ? 'row' : 'cell', chosen: null, hintStep: 0, assisted: false, outcome: null};
     startedAt = phaseStartedAt = performance.now();
@@ -210,6 +231,7 @@
   function select(value) {
     if (state.outcome) return;
     state.chosen = value; render();
+    $('board').children[value]?.focus();
     message('これで よければ「こたえあわせ」を おしてね。');
   }
   function check() {
