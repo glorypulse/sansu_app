@@ -84,6 +84,14 @@
     <strong>ヒントの使い方</strong>
     <p class="muted" style="margin-bottom:0">1回目：指定された「段」を色で示します。<br>2回目：その段の中で、指定された「列」を示します。<br>ヒントなしにも切り替えられます。</p>
   </section>
+  <details class="panel">
+    <summary>おうちのひとへ：きろく</summary>
+    <p id="storageStatus" class="muted"></p>
+    <p class="muted">直近10問を表示します。選択し直すだけでは誤答になりません。Lv.2の段選択・マス選択は別々に記録します。時間には読み上げや中断も含み、理解の程度を判定するものではありません。</p>
+    <ol id="historyList"></ol>
+    <button id="exportBtn">JSONで書き出す</button>
+    <button id="clearBtn">履歴を消す</button>
+  </details>
   <footer>問題は毎回ランダムに作られます。何度でも遊べます。</footer>
 </main>
 <script>
@@ -91,11 +99,44 @@
   const fruits = ['🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍒','🍑','🥝','🍍','🥭','🥥','🍈'];
   const $ = id => document.getElementById(id);
   const rand = n => Math.floor(Math.random() * n);
-  let problem, state;
+  let problem, state, record;
+  const storageKey = 'dokono-masu-history-v1';
+  let history = [], storageAvailable = true, startedAt = 0, phaseStartedAt = 0;
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    if (Array.isArray(stored)) history = stored.filter(r => r && r.version === 1 && Array.isArray(r.events) && r.problem && Number.isInteger(r.problem.level) && typeof r.startedAt === 'string').slice(-200);
+  } catch { storageAvailable = false; }
+  function saveHistory() {
+    try { localStorage.setItem(storageKey, JSON.stringify(history)); }
+    catch { storageAvailable = false; }
+    renderHistory();
+  }
+  function renderHistory() {
+    $('storageStatus').textContent = storageAvailable ? 'このブラウザに直近200問を保存します。' : '保存を利用できません。この画面を閉じるまでの記録です。';
+    const labels = {independent:'補助なし正解', assisted:'補助あり正解', revealed:'答え表示', skipped:'途中で次へ', active:'取り組み中'};
+    $('historyList').innerHTML = '';
+    history.slice(-10).reverse().forEach(r => {
+      const li = document.createElement('li');
+      const answers = r.events.filter(e => e.type === 'answer');
+      li.textContent = `Lv.${r.problem.level} · ${labels[r.outcome] || '中断'} · 確定回答 ${answers.length}回 · ヒント ${r.events.filter(e => e.type === 'hint').length}回`;
+      $('historyList').appendChild(li);
+    });
+  }
+  function logEvent(type, details = {}) {
+    if (!record) return;
+    record.events.push({type, elapsedMs: Math.round(performance.now() - startedAt), phase: state.phase, ...details});
+    if (!history.includes(record)) history.push(record);
+    history = history.slice(-200); saveHistory();
+  }
+  function completeRecord(outcome) {
+    record.outcome = outcome;
+    logEvent('finish', {outcome});
+  }
   const targetIndex = () => problem.row * problem.cols + problem.col;
   const vertical = () => `${problem.verticalStart}から ${problem.verticalNumber}ばんめ`;
   const horizontal = () => `${problem.horizontalStart}から ${problem.horizontalNumber}ばんめ`;
   function makeProblem() {
+    if (record && !state.outcome) completeRecord('skipped');
     stopSpeech();
     const n = Number($('size').value), level = Number($('level').value);
     const singleVertical = level === 1 && rand(2) === 0;
@@ -110,6 +151,8 @@
       hintsEnabled: $('hintMode').value !== 'none',
       items: Array.from({length: rows * cols}, () => fruits[rand(fruits.length)])};
     state = {phase: level === 2 ? 'row' : 'cell', chosen: null, hintStep: 0, assisted: false, outcome: null};
+    startedAt = phaseStartedAt = performance.now();
+    record = {version:1, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, startedAt: new Date().toISOString(), problem: {...problem}, outcome:'active', events:[]};
     render();
     message(state.phase === 'row' ? 'だんを ひとつ えらんでね。' : 'マスを ひとつ えらんでね。');
     if ($('speak').checked) speakQuestion();
@@ -172,13 +215,20 @@
   function check() {
     if (state.outcome || state.chosen === null) return;
     const correct = state.chosen === (state.phase === 'row' ? problem.row : targetIndex());
+    const chosenRow = state.phase === 'row' ? state.chosen : Math.floor(state.chosen / problem.cols);
+    const chosenCol = state.phase === 'row' ? null : state.chosen % problem.cols;
+    logEvent('answer', {correct, chosenRow, chosenCol, rowMatches: chosenRow === problem.row,
+      colMatches: chosenCol === null ? null : chosenCol === problem.col,
+      phaseElapsedMs: Math.round(performance.now() - phaseStartedAt), hintStep: state.hintStep});
     if (!correct) { message('もういちど えらんでみよう。'); return; }
     if (state.phase === 'row') {
+      phaseStartedAt = performance.now();
       state.phase = 'cell'; state.chosen = null; state.hintStep = 0;
       render(); message('この だんの なかで えらぼう。');
       if ($('speak').checked) speakQuestion();
     } else {
       state.outcome = state.assisted ? 'assisted' : 'independent';
+      completeRecord(state.outcome);
       render(); message('せいかい！ よく みつけたね 🎉');
     }
   }
@@ -186,6 +236,7 @@
     if (state.outcome || !problem.hintsEnabled || state.hintStep >= 2) return;
     state.assisted = true;
     state.hintStep = state.phase === 'row' ? 2 : state.hintStep + 1;
+    logEvent('hint', {step:state.hintStep});
     render();
     message(state.phase === 'row' ? 'わくの ついた だんを みてね。' : state.hintStep === 2
       ? 'ふとい わくの マスを みてね。' : problem.level === 1
@@ -194,6 +245,7 @@
   }
   function reveal() {
     if (state.outcome) return;
+    completeRecord('revealed');
     state.outcome = 'revealed'; state.phase = 'cell'; state.chosen = null;
     render(); message('ふとい わくの マスが こたえだよ。');
   }
@@ -204,6 +256,7 @@
     const utterance = new SpeechSynthesisUtterance($('question').textContent);
     utterance.lang = 'ja-JP'; utterance.rate = 0.85;
     window.speechSynthesis.speak(utterance);
+    logEvent('speech');
   }
   ['size','level','hintMode'].forEach(id => $(id).addEventListener('change', makeProblem));
   $('speak').addEventListener('change', () => $('speak').checked ? speakQuestion() : stopSpeech());
@@ -216,6 +269,16 @@
     state.chosen = null; render(); message('えらびなおしてね。');
   });
   $('answerBtn').addEventListener('click', reveal);
+  $('exportBtn').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify({version:1, exportedAt:new Date().toISOString(), history}, null, 2)], {type:'application/json'}));
+    const link = document.createElement('a'); link.href = url; link.download = 'dokono-masu-history.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  $('clearBtn').addEventListener('click', () => {
+    if (!window.confirm('このブラウザの学習履歴を消しますか？')) return;
+    history = []; record = null; saveHistory(); makeProblem();
+  });
+  renderHistory();
   makeProblem();
 })();
 </script>

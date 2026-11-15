@@ -49,3 +49,17 @@ test('hints remain visible and reset with next problem; reveal cannot become a c
  e.answerBtn.click();e.checkBtn.click();assert.equal(e.stepLabel.textContent,'こたえ');
  e.nextBtn.click();assert.equal(e.board.children.filter(b=>b.classes.has('target')).length,0);
 });
+test('history distinguishes stages, hints, reveal, and skips; selection alone is not an answer',()=>{
+ const {els:e,saved}=app(2);const row=coordinate(e.question.textContent,3);
+ e.board.children[row].click();e.resetBtn.click();assert.equal(Object.keys(saved).length,0);
+ e.board.children[row].click();e.checkBtn.click();e.hintBtn.click();e.answerBtn.click();
+ let records=JSON.parse(Object.values(saved)[0]);
+ assert.equal(records[0].outcome,'revealed');assert.equal(records[0].events.filter(x=>x.type==='answer').length,1);
+ assert.equal(records[0].events[0].phase,'row');assert.equal(records[0].events.find(x=>x.type==='hint').phase,'cell');
+ e.nextBtn.click();e.nextBtn.click();records=JSON.parse(Object.values(saved)[0]);assert.equal(records.at(-1).outcome,'skipped');
+});
+test('unavailable or malformed storage does not prevent learning',()=>{
+ for(const storage of [{getItem(){throw Error()},setItem(){throw Error()}},{getItem:()=>'{bad',setItem(){throw Error()}}]){
+  const {els:e}=app(3,3,storage);e.answerBtn.click();assert.equal(e.stepLabel.textContent,'こたえ');assert.match(e.storageStatus.textContent,/保存を利用できません/);
+ }
+});
