@@ -34,6 +34,14 @@
   .step { display:inline-block; border-radius:999px; padding:4px 10px; background:#eef5ef; color:#286342; font-size:.85rem; font-weight:700; margin-bottom:8px; }
   .hidden { display:none !important; }
   footer { text-align:center; color:#7a867e; font-size:.8rem; margin-top:20px; }
+  .row-choice { grid-column:1 / -1; display:flex; justify-content:space-around; min-height:72px; font-size:2rem; border:2px solid var(--line); }
+  .row-hint { background:#e7f4e9; border:3px solid #27865a; }
+  .chosen { outline:4px solid #dc981a; outline-offset:1px; }
+  .single-vertical { max-width:80px; }
+  .retained { text-align:center; color:#286342; margin:4px 0; min-height:1.5em; }
+  button:disabled { cursor:default; }
+  .actions button:disabled, .help button:disabled { opacity:.5; }
+  .cell:disabled:not(.row-hint):not(.target) { background:#f0f2f0; }
 </style>
 </head>
 <body>
@@ -42,6 +50,9 @@
   <p class="sub">たて・よこの場所を組み合わせて、くだものを見つけよう。</p>
 
   <section class="panel settings" aria-label="問題の設定">
+    <label>レベル
+      <select id="level"><option value="1">Lv.1 ひとつの向き</option><option value="2" selected>Lv.2 段からマスへ</option><option value="3">Lv.3 ふたつの条件</option></select>
+    </label>
     <label>マスの大きさ
       <select id="size"><option value="3">3 × 3</option><option value="4">4 × 4</option></select>
     </label>
@@ -54,6 +65,7 @@
   <section class="panel">
     <div class="step" id="stepLabel">もんだい</div>
     <div class="question" id="question" aria-live="polite">上から2ばんめ、左から3ばんめはどこ？</div>
+    <p id="retained" class="retained"></p>
     <div class="board-wrap"><div class="board" id="board" aria-label="くだもののマス目"></div></div>
     <div class="actions">
       <button id="hintBtn">ヒント</button>
@@ -62,6 +74,7 @@
     </div>
     <p class="status" id="status" aria-live="polite">答えだと思うマスをタップしてね。</p>
     <div class="help">
+      <button id="listenBtn">もういちど きく</button>
       <button id="resetBtn">えらびなおす</button>
       <button id="answerBtn">こたえを見る</button>
     </div>
@@ -75,108 +88,134 @@
 </main>
 <script>
 (() => {
-  const fruits = ["🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍒","🍑","🥝","🍍","🥭","🥥","🍈"];
+  const fruits = ['🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍒','🍑','🥝','🍍','🥭','🥥','🍈'];
   const $ = id => document.getElementById(id);
-  let n = 3, row = 0, col = 0, chosen = null, hintStep = 0, items = [], solved = false, verticalStart, horizontalStart, outcome = null;
-
-  function rand(max) { return Math.floor(Math.random() * max); }
+  const rand = n => Math.floor(Math.random() * n);
+  let problem, state;
+  const targetIndex = () => problem.row * problem.cols + problem.col;
+  const vertical = () => `${problem.verticalStart}から ${problem.verticalNumber}ばんめ`;
+  const horizontal = () => `${problem.horizontalStart}から ${problem.horizontalNumber}ばんめ`;
   function makeProblem() {
-    n = Number($("size").value);
-    row = rand(n); col = rand(n); chosen = null; hintStep = 0; solved = false; outcome = null;
-    ["checkBtn", "resetBtn", "answerBtn", "hintBtn"].forEach(id => $(id).disabled = false);
-    items = Array.from({length:n*n}, () => fruits[rand(fruits.length)]);
-    $("board").style.gridTemplateColumns = `repeat(${n}, 1fr)`;
-    $("board").innerHTML = "";
-    items.forEach((fruit, i) => {
-      const cell = document.createElement("button");
-      cell.className = "cell";
-      cell.type = "button";
-      cell.textContent = fruit;
-      cell.setAttribute("aria-label", `${Math.floor(i/n)+1}行${i%n+1}列 ${fruit}`);
-      cell.addEventListener("click", () => selectCell(i));
-      $("board").appendChild(cell);
-    });
-    verticalStart = Math.random() < .5 ? "上" : "下";
-    horizontalStart = Math.random() < .5 ? "左" : "右";
-    const vr = verticalStart === "上" ? row + 1 : n - row;
-    const hc = horizontalStart === "左" ? col + 1 : n - col;
-    $("question").textContent = `${verticalStart}から${vr}ばんめ、${horizontalStart}から${hc}ばんめはどこ？`;
-    $("stepLabel").textContent = "もんだい";
-    $("status").textContent = "答えだと思うマスをタップしてね。";
-    $("hintBtn").classList.toggle("hidden", $("hintMode").value === "none");
-    if ($("speak").checked) speakQuestion();
+    stopSpeech();
+    const n = Number($('size').value), level = Number($('level').value);
+    const singleVertical = level === 1 && rand(2) === 0;
+    const rows = level === 1 && !singleVertical ? 1 : n;
+    const cols = singleVertical ? 1 : n;
+    const row = rand(rows), col = rand(cols);
+    const verticalStart = rand(2) ? 'うえ' : 'した';
+    const horizontalStart = rand(2) ? 'ひだり' : 'みぎ';
+    problem = {n, level, rows, cols, row, col, singleVertical, verticalStart, horizontalStart,
+      verticalNumber: verticalStart === 'うえ' ? row + 1 : rows - row,
+      horizontalNumber: horizontalStart === 'ひだり' ? col + 1 : cols - col,
+      hintsEnabled: $('hintMode').value !== 'none',
+      items: Array.from({length: rows * cols}, () => fruits[rand(fruits.length)])};
+    state = {phase: level === 2 ? 'row' : 'cell', chosen: null, hintStep: 0, assisted: false, outcome: null};
+    render();
+    message(state.phase === 'row' ? 'だんを ひとつ えらんでね。' : 'マスを ひとつ えらんでね。');
+    if ($('speak').checked) speakQuestion();
   }
-  function selectCell(i) {
-    if (solved) return;
-    chosen = i;
-    [...$("board").children].forEach((el, j) => el.classList.toggle("chosen", j === i));
-    $("status").textContent = "このマスでよければ「こたえあわせ」を押してね。";
+  function message(text) { $('status').textContent = text; }
+  function render() {
+    const done = state.outcome !== null;
+    $('question').textContent = problem.level === 1
+      ? `${problem.singleVertical ? vertical() : horizontal()}は どこ？`
+      : state.phase === 'row' ? `${vertical()}の だんを えらぼう`
+      : problem.level === 2 ? `この だんで、${horizontal()}は どこ？`
+      : `${vertical()}、${horizontal()}は どこ？`;
+    $('retained').textContent = problem.level === 2 && state.phase === 'cell' ? `✓ ${vertical()}の だん` : '';
+    $('stepLabel').textContent = done ? (state.outcome === 'revealed' ? 'こたえ' : 'せいかい')
+      : `Lv.${problem.level} · ${state.phase === 'row' ? '① だんを えらぶ' : problem.level === 2 ? '② マスを えらぶ' : 'もんだい'}`;
+    const board = $('board');
+    board.innerHTML = '';
+    board.style.gridTemplateColumns = `repeat(${problem.cols}, minmax(0, 1fr))`;
+    board.classList.toggle('single-vertical', problem.singleVertical);
+    if (state.phase === 'row') {
+      for (let r = 0; r < problem.rows; r++) {
+        const button = document.createElement('button');
+        button.className = 'row-choice';
+        button.type = 'button';
+        button.setAttribute('aria-label', `うえから ${r + 1}ばんめの だん`);
+        button.setAttribute('aria-pressed', String(state.chosen === r));
+        button.classList.toggle('chosen', state.chosen === r);
+        button.classList.toggle('row-hint', r === problem.row && (state.hintStep > 0 || done));
+        button.disabled = done;
+        for (let c = 0; c < problem.cols; c++) {
+          const fruit = document.createElement('span'); fruit.textContent = problem.items[r * problem.cols + c]; button.appendChild(fruit);
+        }
+        button.addEventListener('click', () => select(r)); board.appendChild(button);
+      }
+    } else {
+      problem.items.forEach((fruit, i) => {
+        const button = document.createElement('button'), r = Math.floor(i / problem.cols);
+        button.className = 'cell'; button.type = 'button'; button.textContent = fruit;
+        button.setAttribute('aria-label', `うえから ${r + 1}ばんめ、ひだりから ${i % problem.cols + 1}ばんめ ${fruit}`);
+        button.setAttribute('aria-pressed', String(state.chosen === i));
+        button.classList.toggle('chosen', state.chosen === i);
+        button.classList.toggle('row-hint', r === problem.row && (problem.level === 2 || (problem.level !== 1 && state.hintStep > 0)));
+        button.classList.toggle('target', i === targetIndex() && (done || state.hintStep === 2));
+        button.disabled = done || (problem.level === 2 && r !== problem.row);
+        button.addEventListener('click', () => select(i)); board.appendChild(button);
+      });
+    }
+    $('checkBtn').disabled = done || state.chosen === null;
+    $('resetBtn').disabled = done || state.chosen === null;
+    $('answerBtn').disabled = done;
+    $('hintBtn').disabled = done || state.hintStep >= 2;
+    $('hintBtn').classList.toggle('hidden', !problem.hintsEnabled);
+    $('nextBtn').classList.toggle('primary', done);
   }
-  function targetIndex() { return row*n + col; }
-  function finish(result) {
-    solved = true; outcome = result;
-    ["checkBtn", "resetBtn", "answerBtn", "hintBtn"].forEach(id => $(id).disabled = true);
+  function select(value) {
+    if (state.outcome) return;
+    state.chosen = value; render();
+    message('これで よければ「こたえあわせ」を おしてね。');
   }
   function check() {
-    if (solved) return;
-    if (chosen === null) { $("status").textContent = "まず、マスをひとつタップしてね。"; return; }
-    if (chosen === targetIndex()) {
-      finish(hintStep ? "assisted" : "independent");
-      $("status").textContent = "せいかい！ よく見つけたね 🎉";
-      $("stepLabel").textContent = "せいかい";
-      [...$("board").children].forEach((el, i) => { el.disabled = true; if (i === targetIndex()) el.classList.add("target"); });
+    if (state.outcome || state.chosen === null) return;
+    const correct = state.chosen === (state.phase === 'row' ? problem.row : targetIndex());
+    if (!correct) { message('もういちど えらんでみよう。'); return; }
+    if (state.phase === 'row') {
+      state.phase = 'cell'; state.chosen = null; state.hintStep = 0;
+      render(); message('この だんの なかで えらぼう。');
+      if ($('speak').checked) speakQuestion();
     } else {
-      $("status").textContent = "おしい！ もう一度、場所を考えてみよう。";
+      state.outcome = state.assisted ? 'assisted' : 'independent';
+      render(); message('せいかい！ よく みつけたね 🎉');
     }
   }
   function hint() {
-    if (solved) return;
-    const cells = [...$("board").children];
-    if (hintStep >= 2) return;
-    cells.forEach(el => el.classList.remove("row-hint","target"));
-    if (hintStep === 0) {
-      for (let c=0;c<n;c++) cells[row*n+c].classList.add("row-hint");
-      $("stepLabel").textContent = "ヒント 1";
-      $("status").textContent = `${verticalStart}から数えた段を色で示したよ。この段を見てね。`;
-      hintStep = 1;
-    } else if (hintStep === 1) {
-      for (let c=0;c<n;c++) cells[row*n+c].classList.add("row-hint");
-      cells[targetIndex()].classList.add("target");
-      $("stepLabel").textContent = "ヒント 2";
-      $("status").textContent = `${horizontalStart}から数えた場所も示したよ。`;
-      hintStep = 2;
-    } else {
-      $("status").textContent = "色のついたマスが答えだよ。";
-    }
+    if (state.outcome || !problem.hintsEnabled || state.hintStep >= 2) return;
+    state.assisted = true;
+    state.hintStep = state.phase === 'row' ? 2 : state.hintStep + 1;
+    render();
+    message(state.phase === 'row' ? 'わくの ついた だんを みてね。' : state.hintStep === 2
+      ? 'ふとい わくの マスを みてね。' : problem.level === 1
+      ? `${problem.singleVertical ? problem.verticalStart : problem.horizontalStart}から、ひとつずつ かぞえよう。`
+      : `わくの ついた だんで、${problem.horizontalStart}から かぞえよう。`);
   }
   function reveal() {
-    if (solved) return;
-    finish("revealed");
-    [...$("board").children].forEach((el, i) => {
-      el.disabled = true;
-      if (i === targetIndex()) el.classList.add("target");
-    });
-    $("stepLabel").textContent = "こたえ";
-    $("status").textContent = `答えは ${$("board").children[targetIndex()].textContent} でした。`;
+    if (state.outcome) return;
+    state.outcome = 'revealed'; state.phase = 'cell'; state.chosen = null;
+    render(); message('ふとい わくの マスが こたえだよ。');
   }
+  function stopSpeech() { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); }
   function speakQuestion() {
-    if (!("speechSynthesis" in window)) return;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(new SpeechSynthesisUtterance($("question").textContent));
+    if (!('speechSynthesis' in window)) { message('この ブラウザでは よみあげが つかえません。'); return; }
+    stopSpeech();
+    const utterance = new SpeechSynthesisUtterance($('question').textContent);
+    utterance.lang = 'ja-JP'; utterance.rate = 0.85;
+    window.speechSynthesis.speak(utterance);
   }
-  $("size").addEventListener("change", makeProblem);
-  $("hintMode").addEventListener("change", makeProblem);
-  $("speak").addEventListener("change", () => { if ($("speak").checked) speakQuestion(); });
-  $("hintBtn").addEventListener("click", hint);
-  $("checkBtn").addEventListener("click", check);
-  $("nextBtn").addEventListener("click", makeProblem);
-  $("resetBtn").addEventListener("click", () => {
-    if (solved) return;
-    chosen = null;
-    [...$("board").children].forEach(el => el.classList.remove("chosen"));
-    $("status").textContent = "えらびなおしてね。";
+  ['size','level','hintMode'].forEach(id => $(id).addEventListener('change', makeProblem));
+  $('speak').addEventListener('change', () => $('speak').checked ? speakQuestion() : stopSpeech());
+  $('listenBtn').addEventListener('click', speakQuestion);
+  $('hintBtn').addEventListener('click', hint);
+  $('checkBtn').addEventListener('click', check);
+  $('nextBtn').addEventListener('click', makeProblem);
+  $('resetBtn').addEventListener('click', () => {
+    if (state.outcome) return;
+    state.chosen = null; render(); message('えらびなおしてね。');
   });
-  $("answerBtn").addEventListener("click", reveal);
+  $('answerBtn').addEventListener('click', reveal);
   makeProblem();
 })();
 </script>
