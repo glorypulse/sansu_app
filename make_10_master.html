@@ -409,7 +409,8 @@
 
                         {/* フィードバック表示 */}
                         {feedback && (
-                            <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-start overflow-y-auto overscroll-contain py-6 fade-in z-10 rounded-2xl">
+                            <div className="absolute inset-0 z-10 flex flex-col rounded-2xl bg-white/90 p-4 fade-in">
+                                <div className="min-h-0 w-full flex-1 overflow-y-auto overscroll-contain flex flex-col items-center justify-start">
                                 {feedback === 'correct' ? (
                                     <>
                                         <div className="text-6xl mb-2 bounce">🎉</div>
@@ -418,12 +419,6 @@
                                         <div className="scale-75 origin-center -my-4">
                                             <TenFrame num1={problem.num1} num2={problem.num2} isCarryMode={problem.type === 'carry'} />
                                         </div>
-                                        <button 
-                                            onClick={nextProblem}
-                                            className="mt-4 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition active:scale-95"
-                                        >
-                                            つぎへ進む ▶
-                                        </button>
                                     </>
                                 ) : (
                                     <>
@@ -435,13 +430,23 @@
                                         <div className="scale-75 origin-center -my-4">
                                             <TenFrame num1={problem.num1} num2={problem.num2} isCarryMode={problem.type === 'carry'} />
                                         </div>
-                                        <button 
-                                            onClick={() => { setFeedback(null); setUserAnswer(''); }}
-                                            className="mt-6 bg-slate-400 hover:bg-slate-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition active:scale-95"
-                                        >
-                                            もういちど
-                                        </button>
                                     </>
+                                )}
+                                </div>
+                                {feedback === 'correct' ? (
+                                    <button
+                                        onClick={nextProblem}
+                                        className="mt-3 shrink-0 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition active:scale-95"
+                                    >
+                                        つぎへ進む ▶
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => { setFeedback(null); setUserAnswer(''); }}
+                                        className="mt-3 shrink-0 bg-slate-400 hover:bg-slate-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition active:scale-95"
+                                    >
+                                        もういちど
+                                    </button>
                                 )}
                             </div>
                         )}
