@@ -54,6 +54,16 @@
   .retained:empty { display:none; }
   .settings { margin-top:8px; }
   #historyList { padding-left:22px; font-size:.9rem; line-height:1.7; }
+  .success-dialog { border:0; padding:16px; width:100vw; max-width:none; height:100dvh; max-height:none; margin:0; background:#f8fafc; color:var(--ink); }
+  .success-dialog[open] { display:flex; align-items:center; justify-content:center; }
+  .success-card { width:100%; max-width:448px; max-height:100%; overflow-y:auto; overscroll-behavior:contain; padding:24px 16px; border-radius:24px; background:white; text-align:center; box-shadow:0 12px 28px #26332d20; animation:success-fade .3s ease-out; }
+  .success-icon { font-size:4rem; animation:success-bounce 1s ease-in-out infinite; }
+  .success-card h2 { margin:8px 0; color:#4f46e5; font-size:1.8rem; }
+  .success-board { margin:16px auto; pointer-events:none; }
+  .success-card button { background:#6366f1; color:white; border:0; border-radius:999px; padding:12px 28px; }
+  @keyframes success-fade { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes success-bounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-10px); } }
+  @media (prefers-reduced-motion:reduce) { .success-card, .success-icon { animation:none; } }
   @media (max-width:420px) {
     body { padding:10px 8px 20px; }
     .panel { padding:10px; }
@@ -114,6 +124,16 @@
   </details>
   <footer>問題は毎回ランダムに作られます。何度でも遊べます。</footer>
 </main>
+<dialog id="successDialog" class="success-dialog" aria-labelledby="successTitle" aria-describedby="successMessage">
+  <div class="success-card">
+    <div class="success-icon" aria-hidden="true">🎉</div>
+    <h2 id="successTitle">せいかい！</h2>
+    <p id="successMessage">よく みつけたね！</p>
+    <p id="successQuestion" class="question"></p>
+    <div id="successBoard" class="board success-board" aria-label="せいかいの マス目"></div>
+    <button id="successNextBtn" autofocus>つぎへ進む ▶</button>
+  </div>
+</dialog>
 <script>
 (() => {
   const fruits = ['🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍒','🍑','🥝','🍍','🥭','🥥','🍈'];
@@ -157,6 +177,8 @@
   const horizontal = () => `${problem.horizontalStart}から ${problem.horizontalNumber}ばんめ`;
   function makeProblem() {
     if (record && !state.outcome) completeRecord('skipped');
+    const wasCelebrating = $('successDialog').open;
+    if (wasCelebrating) $('successDialog').close();
     stopSpeech();
     const n = Number($('size').value), level = Number($('level').value);
     $('hintMode').disabled = level === 4;
@@ -175,6 +197,7 @@
     startedAt = phaseStartedAt = performance.now();
     record = {version:1, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, startedAt: new Date().toISOString(), problem: {...problem}, outcome:'active', events:[]};
     render();
+    if (wasCelebrating) $('board').children[0]?.focus();
     message(state.phase === 'row' ? 'だんを ひとつ えらんでね。' : 'マスを ひとつ えらんでね。');
     if ($('speak').checked) speakQuestion();
   }
@@ -255,7 +278,25 @@
       state.outcome = state.assisted ? 'assisted' : 'independent';
       completeRecord(state.outcome);
       render(); message('せいかい！ よく みつけたね 🎉');
+      celebrate();
     }
+  }
+  function celebrate() {
+    stopSpeech();
+    $('successQuestion').textContent = $('question').textContent;
+    const board = $('successBoard');
+    board.innerHTML = '';
+    board.style.gridTemplateColumns = `repeat(${problem.cols}, minmax(0, 1fr))`;
+    board.classList.toggle('single-vertical', problem.singleVertical);
+    problem.items.forEach((fruit, i) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell'; cell.textContent = fruit;
+      cell.classList.toggle('target', i === targetIndex());
+      cell.setAttribute('aria-label', `うえから ${Math.floor(i / problem.cols) + 1}ばんめ、ひだりから ${i % problem.cols + 1}ばんめ ${fruit}${i === targetIndex() ? ' せいかい' : ''}`);
+      board.appendChild(cell);
+    });
+    $('successDialog').showModal();
+    $('successNextBtn').focus();
   }
   function hint() {
     if (state.outcome || !problem.hintsEnabled || state.hintStep >= 2) return;
@@ -289,6 +330,7 @@
   $('hintBtn').addEventListener('click', hint);
   $('checkBtn').addEventListener('click', check);
   $('nextBtn').addEventListener('click', makeProblem);
+  $('successNextBtn').addEventListener('click', makeProblem);
   $('resetBtn').addEventListener('click', () => {
     if (state.outcome) return;
     state.chosen = null; render(); message('えらびなおしてね。');
