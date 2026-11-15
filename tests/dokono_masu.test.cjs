@@ -11,6 +11,8 @@ class Element {
   set innerHTML(v){this.children=[]} set className(v){this.classes=new Set(v.split(' '))}
   setAttribute(k,v){this.attrs[k]=v} addEventListener(k,f){this.handlers[k]=f} appendChild(e){this.children.push(e)}
   focus(){}
+  showModal(){this.open=true}
+  close(){this.open=false}
   click(){if(!this.disabled)this.handlers.click?.()}
 }
 function app(level=2, size=3, storage) {
@@ -72,4 +74,33 @@ test('Lv.4 hides hints even when settings allow them; answer reveal is recorded 
 test('history is capped at 200 questions',()=>{
  const {els:e,saved}=app(1);for(let i=0;i<205;i++)e.nextBtn.click();
  assert.equal(JSON.parse(Object.values(saved)[0]).length,200);
+});
+test('celebrates only final correct answers, once, and resets via the dialog button',()=>{
+ for(const level of [1,2,3,4]) {
+  const {els:e,saved}=app(level,4);
+  let q=e.question.textContent;
+  if(level===2){
+   e.board.children[coordinate(q,4)].click();e.checkBtn.click();
+   assert.ok(!e.successDialog.open);q=e.question.textContent;
+  }
+  const index=level===1?coordinate(q,4):level===2
+   ? coordinate(e.retained.textContent,4)*4+coordinate(q,4)
+   : coordinate(q.split('、')[0],4)*4+coordinate(q.split('、')[1],4);
+  e.board.children[index].click();e.checkBtn.click();
+  assert.equal(e.successDialog.open,true);
+  assert.equal(e.successBoard.children.length,e.board.children.length);
+  assert.equal(e.successBoard.children.filter(c=>c.classes.has('target')).length,1);
+  assert.ok(e.successBoard.children[index].classes.has('target'));
+  e.checkBtn.click();
+  const records=JSON.parse(Object.values(saved)[0]);
+  assert.equal(records[0].events.filter(x=>x.type==='finish').length,1);
+  e.successNextBtn.click();assert.equal(e.successDialog.open,false);
+  assert.ok(e.checkBtn.disabled);
+ }
+});
+test('incorrect answers and answer reveal do not trigger a celebration',()=>{
+ const {els:e}=app(3);
+ const [v,h]=e.question.textContent.split('、');const index=coordinate(v,3)*3+coordinate(h,3);
+ e.board.children[(index+1)%9].click();e.checkBtn.click();assert.ok(!e.successDialog.open);
+ e.answerBtn.click();assert.ok(!e.successDialog.open);
 });
