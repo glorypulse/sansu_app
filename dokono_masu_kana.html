@@ -94,7 +94,7 @@
     <div class="actions">
       <button id="hintBtn">ヒント</button>
       <button class="primary" id="checkBtn">こたえあわせ</button>
-      <button id="nextBtn">つぎのもんだい</button>
+      <button id="nextBtn" hidden>つぎのもんだい</button>
     </div>
     <p class="status" id="status" aria-live="polite">答えだと思うマスをタップしてね。</p>
     <div class="help">
@@ -226,6 +226,9 @@
     $('answerBtn').disabled = done;
     $('hintBtn').disabled = done || state.hintStep >= 2;
     $('hintBtn').classList.toggle('hidden', !problem.hintsEnabled);
+    $('checkBtn').hidden = done;
+    $('checkBtn').classList.toggle('primary', !done);
+    $('nextBtn').hidden = !done;
     $('nextBtn').classList.toggle('primary', done);
   }
   function select(value) {
