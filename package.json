@@ -1,0 +1,10 @@
+{
+  "name": "sansu-app",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "@babel/parser": "^7.29.14"
+  }
+}
