@@ -212,7 +212,8 @@
             };
 
             const checkAnswer = () => {
-                if (!problem || !userAnswer) return;
+                // 正解後は次の問題に進むまで、OKから再加算しない。
+                if (!problem || !userAnswer || feedback === 'correct') return;
 
                 const numVal = parseInt(userAnswer, 10);
                 if (numVal === problem.answer) {
@@ -462,8 +463,8 @@
                         </button>
                         <button
                             onClick={checkAnswer}
-                            disabled={!userAnswer}
-                            className={`bg-indigo-500 border-b-4 border-indigo-700 active:border-b-0 active:translate-y-1 h-16 rounded-xl text-xl font-bold text-white shadow-md transition-all flex items-center justify-center ${!userAnswer ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
+                            disabled={!userAnswer || feedback === 'correct'}
+                            className={`bg-indigo-500 border-b-4 border-indigo-700 active:border-b-0 active:translate-y-1 h-16 rounded-xl text-xl font-bold text-white shadow-md transition-all flex items-center justify-center ${!userAnswer || feedback === 'correct' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
                         >
                             OK
                         </button>
